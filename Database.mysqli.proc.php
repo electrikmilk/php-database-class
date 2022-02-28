@@ -1,19 +1,17 @@
 <?php
 
-// todo: use bind_param
-
 class Database
 {
-	private mysqli $connection;
+	private $connection;
 	private string $error;
 
 	/**
-	 * @throws Exception
+	 * @throws ErrorException
 	 */
 	public function __construct(string $db)
 	{
 		try {
-			$this->connection = new mysqli('hostname', 'username', 'password', $db);
+			$this->connection = mysqli_connect('hostname', 'username', 'password', $db);
 			if (!$this->connection || mysqli_connect_errno()) throw new Exception("Database connection failed: ".mysqli_connect_error());
 		} catch (Exception $e) {
 			die('Caught exception: ' . $e->getMessage());
@@ -33,16 +31,16 @@ class Database
 			if (!$value) {
 				$values[] = null;
 			} else {
-				$values[] = $this->connection->real_escape_string($value);
+				$values[] = mysqli_real_escape_string($this->connection, $value);
 			}
 		}
 		$values = implode("`,`", $values);
-		$query = $this->connection->query("insert into $table ($cols) values (`$values`)");
+		$query = mysqli_query($this->connection, "insert into $table ($cols) values (`$values`)");
 		if (!$query) {
-			$this->error = "Database Error: " . $this->connection->error;
+			$this->error = "Database Error: " . mysqli_error($this->connection);
 			return false;
 		}
-		return $this->connection->insert_id;
+		return mysqli_insert_id($this->connection);
 	}
 
 	private function read($table, $where, $order = null, $limit = null)
@@ -60,7 +58,7 @@ class Database
 				if ($order[1]) {
 					try {
 						if ($order[1] !== "asc" || $order[1] !== "desc") {
-							throw new Exception("Tried to sort by $order[1].");
+							throw new RuntimeException("Tried to sort by $order[1].");
 						}
 					} catch (Exception $e) {
 						die('Caught exception: ' . $e->getMessage());
@@ -73,11 +71,11 @@ class Database
 		if ($limit) {
 			$limit = "limit $limit";
 		}
-		$query = $this->connection->query("select * from $table where $where $order $limit");
-		if ($query->num_rows) {
+		$query = mysqli_query($this->connection, "select * from $table where $where $order $limit");
+		if (mysqli_num_rows($query) === 0) {
 			return false;
 		}
-		return $query->fetch_assoc();
+		return mysqli_fetch_array($query);
 	}
 
 	private function modify($action, $table, $fields, $where): bool
@@ -97,7 +95,7 @@ class Database
 				if (!$value) {
 					$value = "NULL";
 				} else {
-					$value = "'" . $this->connection->real_escape_string($value) . "'";
+					$value = "'" . mysqli_real_escape_string($this->connection, $value) . "'";
 				}
 				$update_fields[] = "$column = $value";
 			}
@@ -111,7 +109,7 @@ class Database
 		if (is_array($update_fields)) {
 			unset($update_fields);
 		}
-		$query = $this->connection->query("$action $table $update_fields where $where");
+		$query = mysqli_query($this->connection, "$action $table $update_fields where $where");
 		if (!$query) {
 			return false;
 		}
