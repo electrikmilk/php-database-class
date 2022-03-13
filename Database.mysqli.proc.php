@@ -1,21 +1,36 @@
 <?php
+/**
+ * Database.php
+ *
+ * @author brandonjordan
+ * @datetime 3/12/2022 19:11
+ * @copyright (c) 2022 Brandon Jordan
+ */
 
 class Database
 {
 	private $connection;
+	private string $db;
 	private string $error;
+	private string $count;
 
 	/**
-	 * @throws ErrorException
+	 * @throws Error
 	 */
 	public function __construct(string $db)
 	{
 		try {
-			$this->connection = mysqli_connect('hostname', 'username', 'password', $db);
-			if (!$this->connection || mysqli_connect_errno()) throw new Exception("Database connection failed: ".mysqli_connect_error());
-		} catch (Exception $e) {
-			die('Caught exception: ' . $e->getMessage());
+			$this->db = $db;
+			$this->connection = mysqli_connect('hostname', 'user', 'password', $this->db);
+			if (!$this->connection || mysqli_connect_errno()) throw new Error("Database connection failed: " . mysqli_connect_error());
+		} catch (Error $e) {
+			die('Caught error: ' . $e->getMessage());
 		}
+	}
+
+	public function count()
+	{
+		return $this->count ?? 0;
 	}
 
 	public function error()
@@ -43,7 +58,7 @@ class Database
 		return mysqli_insert_id($this->connection);
 	}
 
-	private function read($table, $where, $order = null, $limit = null)
+	private function read(string $table, $where, ?array $order, ?int $limit)
 	{
 		if (is_array($where)) {
 			if (count($where) === 3) {
@@ -52,16 +67,19 @@ class Database
 				return false;
 			}
 		}
+		if ($where) {
+			$where = "where $where";
+		}
 		if ($order) {
 			if (count($order) === 2 || (count($order) === 1 && $order[0] === "RAND()")) {
 				$order = implode(" ", $order);
 				if ($order[1]) {
 					try {
 						if ($order[1] !== "asc" || $order[1] !== "desc") {
-							throw new RuntimeException("Tried to sort by $order[1].");
+							throw new Error("Tried to sort by $order[1].");
 						}
-					} catch (Exception $e) {
-						die('Caught exception: ' . $e->getMessage());
+					} catch (Error $e) {
+						die('Caught error: ' . $e->getMessage());
 					}
 				}
 			} else {
@@ -71,8 +89,12 @@ class Database
 		if ($limit) {
 			$limit = "limit $limit";
 		}
-		$query = mysqli_query($this->connection, "select * from $table where $where $order $limit");
-		if (mysqli_num_rows($query) === 0) {
+		$query = mysqli_query($this->connection, "select * from $this->db.$table $where $order $limit");
+		if (!$query) {
+			return false;
+		}
+		$this->count = mysqli_num_rows($query);
+		if ($this->count === 0) {
 			return false;
 		}
 		return mysqli_fetch_array($query);
@@ -116,9 +138,9 @@ class Database
 		return true;
 	}
 
-	public function get(string $table, $where, ?array $order, ?int $limit)
+	public function get(string $table, $where = null, ?array $order = null, ?int $limit = null)
 	{
-		return $this->read($table, $where);
+		return $this->read($table, $where, $order, $limit);
 	}
 
 	public function update(string $table, array $fields, array $where): bool
